@@ -17,4 +17,4 @@ For the frequency spectra, the script applies a Hanning window to reduce spectra
 For the time series, the script plots the log amplitude of the three most energetically dominant wave modes against rotation time. For the (1,1) mode, a line of best fit is fitted to the linear growth phase to extract the numerical growth rate, which is then compared against the analytic prediction for the logarithmic growth rate in the linearised case: `(3√3/16) × mean_amplitude × forcing_frequency`. For simulations exhibiting two distinct growth phases, both are fitted and plotted separately.
 
 ## Dependencies
-Python 3, NumPy, SciPy, Matplotlib, SymPy
+Python 3, NumPy, Matplotlib, SymPy
