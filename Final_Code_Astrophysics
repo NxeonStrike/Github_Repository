@@ -3,7 +3,7 @@
 ### Plot periodogram from iner_P or T .tag ###
 ##############################################
 
-# from astropy.timeseries import LombScargle
+# Standard scientific computing libraries
 import numpy as np
 from numpy.fft import fft, ifft
 import matplotlib.pyplot as plt
@@ -11,184 +11,216 @@ import matplotlib as mpl
 import sys
 import os
 from matplotlib import cm
-from sympy import symbols, Eq, Matrix, solve
+from sympy import symbols, Eq, Matrix, solve  # Used for symbolic algebra when identifying resonant frequency combinations
 
-# style
-pgf_with_latex = { # setup matplotlib to use LaTeX for output
-    # 'pgf.texsystem': 'pdflatex', # change this if using XeTeX or LuaTeX
-    # 'text.usetex': True, # use LaTeX to write all text # often not working 
+# ---------------------------------------------------------------
+# Plot styling: configure matplotlib to use LaTeX-style formatting
+# ---------------------------------------------------------------
+pgf_with_latex = {
     'mathtext.fontset': 'stix',
-    'xtick.top':True,
-    'ytick.right':True,
-    'xtick.direction':'in',
-    'ytick.direction':'in',
-    'axes.labelsize': 20, # x and y label fontsize; laTeX default is 10pt font                                                                  
-    'font.size': 16,       # Legend title fontsize                                                                                              
-    'legend.fontsize': 16, # Legend fontsize; make the legend/label fonts a little smaller                                                      
-    'xtick.labelsize': 14, # values fontsize                                                                                                   
+    'xtick.top': True,
+    'ytick.right': True,
+    'xtick.direction': 'in',
+    'ytick.direction': 'in',
+    'axes.labelsize': 20,
+    'font.size': 16,
+    'legend.fontsize': 16,
+    'xtick.labelsize': 14,
     'ytick.labelsize': 14,
     'lines.linewidth': 3
 }
 mpl.rcParams.update(pgf_with_latex)
-# modes in inerPT.tag, sum l+m even or odd
+
+# ---------------------------------------------------------------
+# Wave mode dictionaries
+# Each key is a column index in the simulation data file,
+# and each value is the corresponding (l, m) mode label.
+# Modes are separated by whether l+m is even or odd.
+# ---------------------------------------------------------------
 even = {1:r'$(1,1)$',3:r'$(2,2)$',4:r'$(3,1)$',6:r'$(3,3)$',8:r'$(4,2)$',10:r'$(4,4)$',11:r'$(5,1)$',13:r'$(5,3)$',15:r'$(5,5)$',17:r'$(6,2)$',19:r'$(6,4)$',21:r'$(6,6)$'}
 odd  = {2:r'$(2,1)$',5:r'$(3,2)$',7:r'$(4,1)$',9:r'$(4,3)$',12:r'$(5,2)$',14:r'$(5,4)$',16:r'$(6,1)$',18:r'$(6,3)$',20:r'$(6,5)$'}
-tot  = {key: value for d in (even, odd) for key, value in d.items()}
+tot  = {key: value for d in (even, odd) for key, value in d.items()}  # Combined dictionary of all modes
 
 print(tot)
-# parameters to change
-tab  = tot     # usually even for P, odd for T
-pot  = 'P'     # poloidal or toroidal
-pots = {'P':'W','T':'Z'} 
+
+# ---------------------------------------------------------------
+# Parameters: adjust these to switch between poloidal/toroidal
+# and select specific simulations or frequency ranges
+# ---------------------------------------------------------------
+tab  = tot      # Mode dictionary to use (even for poloidal P, odd for toroidal T)
+pot  = 'P'      # 'P' = poloidal, 'T' = toroidal
+pots = {'P':'W','T':'Z'}  # Maps potential type to its symbol for axis labels
 inif = '1p1'
-CT    = '1em2'
-tag  = '' #'_alpha0p5'
-# Ek   = '1em5'
+CT   = '1em2'
+tag  = ''
 
 n_colors = len(tab)
-c = ["k", "purple", "orange", "cyan", "green", "darkblue", "red", "yellow", "pink", "gray", "#008080", "#BFFF00"] 
-colours  = c
-y_lim = 3e5
+c = ["k", "purple", "orange", "cyan", "green", "darkblue", "red", "yellow", "pink", "gray", "#008080", "#BFFF00"]
+colours = c
+y_lim = 3e5  # Minimum power threshold for plotting a mode's frequency spectrum
 
-nam  = ''#'om'+inif+'_A'+CT+tag+'/'
-do   = {nam:['test']}
-wdir = '/scratch/1/users/amtaava/'
+# ---------------------------------------------------------------
+# Simulation data directory and filtering
+# ---------------------------------------------------------------
+nam = ''
+do  = {nam: ['test']}
+wdir = '/scratch/1/users/amtaava/'  # Path to simulation data
+
 all_files = os.listdir(wdir)
-#print(all_files)
-dirs = [directory for directory in all_files  if os.path.isdir(os.path.join(wdir, directory))]
-#print(dirs)
-#print(len(dirs))
-if 'm6p2'in dirs:
+dirs = [directory for directory in all_files if os.path.isdir(os.path.join(wdir, directory))]  # List all simulation directories
+
+# Remove directories that are not relevant simulations
+if 'm6p2' in dirs:
     dirs.remove('m6p2')
 if 'sumstu_yh' in dirs:
     dirs.remove('sumstu_yh')
 
-#print(len(dirs))
-interesting_simulations = ["om1p12_A5em2_alpha0p5", 
-"om1p08_A5em2_alpha0p5", "om1p06_A5em2_alpha0p5", "om1p04_A5em2_alpha0p5", "om1p1_A5em2_alpha0p5", "omm0p54_A5em2_alpha0p5",
-"omm0p74_A5em2_alpha0p5", "omm1p04_A5em2_alpha0p5", "omm1p06_A5em2_alpha0p5", "omm1p12_A5em2_alpha0p5", "omm1p16_A5em2_alpha0p5", "omm1p18_A5em2_alpha0p5",
- "omm1p5_A5em2_alpha0p5", "omm1p62_A5em2_alpha0p5", "omm1p6_A5em2_alpha0p5"]
+# Simulations identified as worth analysing after initial batch inspection
+interesting_simulations = [
+    "om1p12_A5em2_alpha0p5", "om1p08_A5em2_alpha0p5", "om1p06_A5em2_alpha0p5",
+    "om1p04_A5em2_alpha0p5", "om1p1_A5em2_alpha0p5", "omm0p54_A5em2_alpha0p5",
+    "omm0p74_A5em2_alpha0p5", "omm1p04_A5em2_alpha0p5", "omm1p06_A5em2_alpha0p5",
+    "omm1p12_A5em2_alpha0p5", "omm1p16_A5em2_alpha0p5", "omm1p18_A5em2_alpha0p5",
+    "omm1p5_A5em2_alpha0p5", "omm1p62_A5em2_alpha0p5", "omm1p6_A5em2_alpha0p5"
+]
 
-special_simulations = ["omm1p62_A5em2_alpha0p5", "omm1p6_A5em2_alpha0p5"]
+special_simulations = ["omm1p62_A5em2_alpha0p5", "omm1p6_A5em2_alpha0p5"]  # Simulations exhibiting notable behaviour
 
-interesting_simulations1 = [ "om1p1_A5em2_alpha0p5"]
+# Final curated set of simulations selected for detailed analysis
+final_simulations = [
+    "om1p12_A5em2_alpha0p5", "om1p08_A5em2_alpha0p5", "om1p06_A5em2_alpha0p5",
+    "om1p04_A5em2_alpha0p5", "omm1p5_A5em2_alpha0p5", "omm1p62_A5em2_alpha0p5",
+    "omm1p6_A5em2_alpha0p5"
+]
 
-steady_simulations = ["omm1p6_A5em2_alpha0p5"]
+steady_simulations = ["omm1p6_A5em2_alpha0p5"]  # Simulations that reach a steady state
 
-final_simulations = ["om1p12_A5em2_alpha0p5", "om1p08_A5em2_alpha0p5", "om1p06_A5em2_alpha0p5",   "om1p04_A5em2_alpha0p5", "omm1p5_A5em2_alpha0p5", "omm1p62_A5em2_alpha0p5", "omm1p6_A5em2_alpha0p5"]
-
-various_names = ['inerP.compar6p2_BIS3', 'inerP.hiPhiRes', 'inerP.test', 'inerP.test_BIS', 'inerP.hiPhiTimRes', 'inerP.test2']
-
-file_index = 0
-
-
+# ---------------------------------------------------------------
+# Main loop: iterate over each selected simulation
+# ---------------------------------------------------------------
 for d in final_simulations:
-    plt.figure(figsize = (30, 14))
+    plt.figure(figsize=(30, 14))
+
+    # Extract the forcing frequency from the simulation directory name.
+    # Directory names encode the frequency as e.g. "om1p12" -> 1.12 or "omm0p54" -> -0.54.
+    # The sign of the frequency reflects the direction of wave propagation relative to the rotation:
+    # positive frequencies propagate prograde, negative frequencies propagate retrograde.
+    # This frequency is the predicted dominant frequency for the simulation, which is why
+    # it is used as one of the three basis frequencies for resonance identification.
     if d[2] == "m":
-        check_freq = float(d.split("_")[0].split("omm")[1].replace("p","."))
+        check_freq = float(d.split("_")[0].split("omm")[1].replace("p", "."))
     else:
-        check_freq = float(d.split("_")[0].split("om")[1].replace("p","."))
-    #print(d)
-    
+        check_freq = float(d.split("_")[0].split("om")[1].replace("p", "."))
+
+    # Load the simulation data file (columns correspond to different wave modes)
     important_child = [child for child in os.listdir(os.path.join(wdir, d)) if 'iner' in child][0]
-    #print(important_child)
-    fdom = open(wdir+d+'/'+important_child, 'r')
-   # if 'inerP.test' in children:
-       # print('found without bis')
-       # fdom = open(wdir+d+'/iner'+pot+'.'+tagi, 'r')
-   #  elif 'inerP.test_BIS' in children:
-      #  print('found with bis')
-      #  fdom2 = open(wdir+d+'/iner'+pot+'.'+tagi+'_BIS', 'r')
+    fdom = open(wdir + d + '/' + important_child, 'r')
+    la = np.loadtxt(fdom)
 
-    la   = np.loadtxt(fdom)
+    itend = len(la[:, 0])
+    t = la[:itend, 0]  # Time array
 
-    itend = len(la[:,0])
+    # ---------------------------------------------------------------
+    # Spectral analysis setup
+    # ---------------------------------------------------------------
+    sr = len(t)           # Number of time samples (sampling rate)
+    dt = max(t) / sr      # Time step size
 
-    t = la[:itend,0]
-    #print(t)
-    #print(len(t))
-    
-# sampling rate
-    sr = len(t)
-    dt = max(t)/sr
-
-    # Window functions
+    # Hanning window to reduce spectral leakage in the FFT
     w1 = np.zeros(sr)
     for n in range(sr):
-        w1[n] = 1./2-1./2*np.cos(2*np.pi*n/(sr-1))        # Hanning function
+        w1[n] = 1./2 - 1./2 * np.cos(2 * np.pi * n / (sr - 1))
 
-    # compute Fourier transform and frequencies
-    used_frequencies = set()
-    freqs   = np.fft.fftfreq(sr, d=dt)*2*np.pi
+    # Compute frequency array for the FFT output
+    freqs = np.fft.fftfreq(sr, d=dt) * 2 * np.pi  # Angular frequencies
 
+    # ---------------------------------------------------------------
+    # Identify the three dominant wave modes by peak FFT amplitude
+    # ---------------------------------------------------------------
     highest_ffts = {}
     frequency_basis = []
-    important_indx = 0
     indx = 0
-    
-    lmi = 1  # mode you want to look at
-    fft = np.fft.fft(la[:itend,lmi]*w1)
+
+    lmi = 1
     highest_indices = []
     for i in range(1, 4):
-        fft = np.fft.fft(la[:itend,lmi]*w1) #fft needs to be insdie the loop as we NEED to generate new points each iteration, this cannot happen if fft is outside the for loop
-        highest_indices.append(np.argmax(np.abs(fft)))
-        lmi = int((-1/2)*i**2 +(7/2)*i -2)
+        # FFT is recomputed inside the loop to generate a fresh spectrum for each mode
+        fft_vals = np.fft.fft(la[:itend, lmi] * w1)
+        highest_indices.append(np.argmax(np.abs(fft_vals)))
+        lmi = int((-1/2) * i**2 + (7/2) * i - 2)  # Index formula to step through key modes
         print(lmi)
 
     print(highest_indices)
-    max_freqs = [freqs[index] for index in highest_indices]
-    for power in range(1, 3):
-        term = 2*power - 1
-        basis_ffts = np.fft.fft(la[:itend, term]*w1)
-        frequency_basis.append(np.round(np.abs(freqs[np.argmax(basis_ffts)]), 4))
+    max_freqs = [freqs[index] for index in highest_indices]  # Frequencies of the three dominant peaks
 
-    frequency_basis.append(np.round(check_freq, 2))
-    
-    for i,lm in enumerate(tab):
+    # Build the frequency basis: the three reference frequencies used to identify resonances.
+    # The two mode frequencies are selected purely on the basis of having the highest spectral power,
+    # and are combined with the forcing frequency to form the basis for resonance identification.
+    for power in range(1, 3):
+        term = 2 * power - 1
+        basis_ffts = np.fft.fft(la[:itend, term] * w1)
+        frequency_basis.append(np.round(np.abs(freqs[np.argmax(basis_ffts)]), 4))
+    frequency_basis.append(np.round(check_freq, 2))  # Add forcing frequency as third basis element
+
+    # ---------------------------------------------------------------
+    # Plot frequency spectra for all modes exceeding the power threshold
+    # ---------------------------------------------------------------
+    for i, lm in enumerate(tab):
         print(lm)
-        ffts = np.fft.fft(la[:itend,lm]*w1)
-        
+        ffts = np.fft.fft(la[:itend, lm] * w1)
         print(f"These are the values: {frequency_basis}")
-        highest_ffts[lm] = max(abs(ffts))
-        #print(highest_ffts)
-        #print(max(abs(fft)))
-        # select frequencies with highest power
-        if np.any(abs(ffts)>y_lim):
-            #print(indx)
-            #print(i, 2*i)
+        highest_ffts[lm] = max(abs(ffts))  # Store peak power for each mode
+
+        if np.any(abs(ffts) > y_lim):  # Only plot modes with significant power
             print(len(freqs))
-            print(len(colours))
-            plt.plot(freqs, abs(ffts),label=tab[lm],color=colours[indx])
+            plt.plot(freqs, abs(ffts), label=tab[lm], color=colours[indx])
             indx += 1
+
+            # ---------------------------------------------------------------
+            # Resonance identification
+            # Find spectral peaks that can be expressed as integer linear
+            # combinations of the three basis frequencies (w0, w1, w2).
+            # This identifies triadic resonances and other nonlinear interactions.
+            # Integer coefficients are constrained to low orders (up to 5) to
+            # reduce spurious detections in noisy spectra.
+            # ---------------------------------------------------------------
             important_indices = [x for x in np.where(abs(ffts) > 3.e5)[0]]
             important_frequencies = list(set([abs(freqs[x]) for x in important_indices]))
             math_frequencies = [freq for freq in important_frequencies if freq not in max_freqs]
+
             used_math_frequencies = []
             label_positions_y = []
-            label_spacing = 2e6 #7e6
-            y_base = max(max(np.abs(fft)), 1e6)
+            label_spacing = 2e6
+            y_base = max(max(np.abs(ffts)), 1e6)
+
             for frequency in math_frequencies:
-    # Check if frequency is too close to any existing one
+                # Use symbolic algebra to solve: w0*f0 + w1*f1 + w2*f2 = frequency
+                # where w0, w1, w2 are unknown integer coefficients
                 coeffs = symbols("w0 w1 w2")
-                vector_needed1 = Matrix([var for var in coeffs]) #Creates vector for scalar product
-                vector_needed2 = Matrix([freq for freq in frequency_basis]) #Creates vector for scalar product, sympy is useful because it allows me to do this with the variables i created
+                vector_needed1 = Matrix([var for var in coeffs])       # Coefficient vector
+                vector_needed2 = Matrix([freq for freq in frequency_basis])  # Basis frequency vector
                 solution = solve(Eq(vector_needed1.dot(vector_needed2), frequency))
 
                 if solution:
+                    # Test integer combinations up to order 5 in w1 and w2
                     for i in range(3):
                         for j in range(4):
                             w0_ex = solution[0][coeffs[0]]
-                            w0_val = w0_ex.subs({coeffs[1] : i, coeffs[2] : j}).evalf()
+                            w0_val = w0_ex.subs({coeffs[1]: i, coeffs[2]: j}).evalf()
+
+                            # Accept only near-integer solutions (tolerance 0.005) to avoid spurious matches
                             if np.abs(int(w0_val) - w0_val) <= 0.005 and np.round(frequency, 2) not in used_math_frequencies:
+
+                                # Determine vertical label position, avoiding overlaps
                                 lane_index = 0
                                 while True:
                                     proposed_y = y_base + lane_index * label_spacing + 10e5
                                     if all(abs(proposed_y - y) > label_spacing * 0.9 for y in label_positions_y):
                                         break
                                     lane_index += 1
-
                                 label_positions_y.append(proposed_y)
 
+                                # Label the resonance depending on which basis frequencies contribute
                                 if i != 0 and j != 0 and int(w0_val) != 0:
                                     plt.axvline(x=frequency, color='gray', linestyle='--', linewidth=1)
                                     plt.text(frequency + 0.001, proposed_y, f"${int(w0_val)}\\,\\omega_0 + {i}\\,\\omega_1 + {j}\\,\\omega_2$", rotation=90, va='center', ha='left', color='black', fontsize=10)
@@ -212,11 +244,11 @@ for d in final_simulations:
                                     else:
                                         plt.axvline(x=frequency, color='gray', linestyle='--', linewidth=1)
                                         plt.text(frequency + 0.001, proposed_y, f"${j}\\,\\omega_2$", rotation=90, va='center', ha='left', color='black', fontsize=10)
-                                        used_math_frequencies.append(np.round(frequency, 2))   
+                                        used_math_frequencies.append(np.round(frequency, 2))
                                 if i != 0 and j == 0 and int(w0_val) != 0:
                                     plt.axvline(x=frequency, color='gray', linestyle='--', linewidth=1)
                                     plt.text(frequency + 0.001, proposed_y, f"${int(w0_val)}\\,\\omega_0 + {i}\\,\\omega_1$", rotation=90, va='center', ha='left', color='black', fontsize=10)
-                                    used_math_frequencies.append(np.round(frequency, 2))     
+                                    used_math_frequencies.append(np.round(frequency, 2))
                                 if i != 0 and j == 0 and int(w0_val) == 0:
                                     if i == 1:
                                         plt.axvline(x=frequency, color='blue', linestyle='--', linewidth=1)
@@ -229,22 +261,19 @@ for d in final_simulations:
                                     plt.axvline(x=frequency, color='gray', linestyle='--', linewidth=1)
                                     plt.text(frequency + 0.001, proposed_y, f"${i}\\,\\omega_1 + {j}\\,\\omega_2$", rotation=90, va='center', ha='left', color='black', fontsize=10)
                                     used_math_frequencies.append(np.round(frequency, 2))
-                                    
-                                    
-                                #used_math_frequencies.append(np.round(frequency, 2))
-                                
+
                                 print(solution)
 
-#                is_close = any(abs(frequency - check) < 0.05 for check in used_frequencies)
-#                if not is_close:
-#                    plt.axvline(x=frequency, color='gray', linestyle='--', linewidth=1)
-                
-#                used_frequencies.add(frequency)
-
-    #print(tab)
+    # ---------------------------------------------------------------
+    # Identify the three modes with the highest peak FFT power
+    # (used to select which modes to plot in the time series below)
+    # ---------------------------------------------------------------
     time_maxvals = sorted(highest_ffts.values(), reverse=True)
-    time_indices = [k for k, v in highest_ffts.items() if v in time_maxvals and k != 8][:3] #Use this as a way to find specific keys to values, iterate with a for loop through the tuples and use an if statment to check the values and return the key
+    time_indices = [k for k, v in highest_ffts.items() if v in time_maxvals and k != 8][:3]
+
     print(max_freqs)
+
+    # Label the three basis frequencies on the frequency spectrum plot
     for i in range(3):
         if i == 0:
             if d == "omm1p62_A5em2_alpha0p5":
@@ -254,76 +283,49 @@ for d in final_simulations:
             plt.text(frequency_basis[i] + 0.01, 20e5, f"$\omega_{i}$: {np.round(frequency_basis[i], 2)}", rotation=90, va='center', ha='left', color='green', fontsize=10)
         if i == 1:
             if d == "om1p1_A5em2_alpha0p5":
-                plt.axvline(x=0.27, color='blue', linestyle='--', linewidth=1)    
+                plt.axvline(x=0.27, color='blue', linestyle='--', linewidth=1)
             plt.text(frequency_basis[i] + 0.01, 20e5, f"$\omega_{i}$: {np.round(frequency_basis[i], 2)}", rotation=90, va='center', ha='left', color='blue', fontsize=10)
         if i == 2:
             plt.text(frequency_basis[i] + 0.01, 20e5, f"$\omega_{i}$: {np.round(frequency_basis[i], 2)}", rotation=90, va='center', ha='left', color='red', fontsize=10)
-        print("plotted:"+f" {i}")
-    #print(time_indices)
-    #highest_frequencies = [freqs[index] for index in highest_power_indices]   
-    #print(highest_frequencies)
+        print("plotted:" + f" {i}")
 
-    # optional: find frequencies associated with highest FFT values
-    #important_fft = [x for x in abs(fft) if x > 1e4]
-    #print(important_fft)
-    #print(max(abs(fft)))
-    #important_indices = [x for x in np.where(abs(fft) > 1e4)[0]]
-    #print(important_indices)
-
-    #for frequency in important_indices:
-        #print(f"Vertical line at: {freqs[frequency]}")
-        #plt.axvline(x=freqs[frequency], color='gray', linestyle='--', linewidth=1)
-
-
-    #coeftab, freqtab = [], []
-    #for coef, freq in zip(fft, freqs):
-        #if freq>0.05 and freq<0.1:
-            #coeftab.append(coef)
-            #freqtab.append(freq)
-    #idx = np.where(coeftab == max(coeftab))[0][0]
-    #print(int(coeftab[idx]),freqtab[idx],tab[lmi])
-
-    old_fft = np.fft.fft(la[:itend, 1]*w1)
+    # ---------------------------------------------------------------
+    # Check whether the dominant mode matches the forcing frequency,
+    # then finalise and save the frequency spectrum plot
+    # ---------------------------------------------------------------
+    old_fft = np.fft.fft(la[:itend, 1] * w1)
     max_freq = freqs[np.argmax(old_fft)]
 
-    if max_freq <= check_freq+0.005 or max_freq >= check_freq-0.005:
-        plt.axvline(x=check_freq, color='red', linestyle='--', linewidth=0.5)
-        plt.axvline(x=check_freq/2, color='orange', linestyle='--', linewidth=1)
+    if max_freq <= check_freq + 0.005 or max_freq >= check_freq - 0.005:
+        plt.axvline(x=check_freq, color='red', linestyle='--', linewidth=0.5)        # Mark forcing frequency
+        plt.axvline(x=check_freq / 2, color='orange', linestyle='--', linewidth=1)  # Mark subharmonic (half forcing frequency), indicative of parametric instability
 
-
-        # # to identify frequency excited
-        #omega  = 0.2
-        #p4, = plt.plot(np.ones(100)*omega,np.linspace(0,hi,100),'--',label=r'$\omega=0.2$')
-
-        # # gather the legends
-         #ps = [p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11]
-         #ls = []
-
-        # plt.legend(ps,ls,loc='upper right',ncol=2)
-        #plt.gca().add_artist(l0)
-
-        # Plot Fourier analysis
-        
         plt.xlim([0, 2.0])
-        plt.ylim([y_lim, 1.1*time_maxvals[0]])
-        plt.ticklabel_format(axis='y', style='sci', scilimits=(5,5))
+        plt.ylim([y_lim, 1.1 * time_maxvals[0]])
+        plt.ticklabel_format(axis='y', style='sci', scilimits=(5, 5))
         plt.xlabel(r'$\omega$')
-        plt.ylabel(r'$\mathrm{power\ of\ '+pots[pot]+'}$')
-        plt.legend(title=r'$(l,m)$', ncol = 2)
+        plt.ylabel(r'$\mathrm{power\ of\ ' + pots[pot] + '}$')
+        plt.legend(title=r'$(l,m)$', ncol=2)
         plt.title(d)
 
-        print(d+" Time series being plotted")
-        plt.figure(figsize = (30, 6))
+        # ---------------------------------------------------------------
+        # Time series plots: track evolution of dominant wave modes
+        # Log amplitude is plotted against rotation time to identify
+        # exponential growth phases and compare against analytic predictions
+        # ---------------------------------------------------------------
+        print(d + " Time series being plotted")
+        plt.figure(figsize=(30, 6))
         priority_index = 3
+
         for index in time_indices:
             old_locator = 0
             old_stabiliser = 0
-
             locator = 0
             stabiliser = 0
-
             upd_locator = 0
             upd_stabiliser = 0
+
+            # Set time window for the plot depending on whether the simulation reaches steady state
             if d in steady_simulations:
                 old_locator += 400
                 plt.xlim([0, old_locator])
@@ -332,46 +334,44 @@ for d in final_simulations:
                 plt.xlim([0, old_locator])
 
             plt.title(d)
-            plt.xlabel("Time"+"("r" $\Omega*t$"+")")
+            plt.xlabel("Time" + "(" r" $\Omega*t$" + ")")
             plt.ylabel("log(W)")
+
+            # Take log of positive values only; NaN elsewhere to avoid log(0) errors
             time_ydata = np.where(la[:, index] > 0, la[:, index], np.nan)
             time_fixed_data = np.where(la[:, 3] > 0, la[:, 3], np.nan)
-            plt.plot(t, np.log(time_ydata), ls = '-', label = tab[index], zorder=priority_index)
+            plt.plot(t, np.log(time_ydata), ls='-', label=tab[index], zorder=priority_index)
+
+            # For the (1,1) mode, fit a line of best fit to the log amplitude
+            # to extract the growth rate and compare against the analytic prediction
             if index == 1:
+                # Simulation-specific time windows for the linear growth phase,
+                # modified so that the instability of the system is highlighted, including when the system reaches equilibrium
                 if d == "om1p12_A5em2_alpha0p5":
-                    stabiliser += 600
-                    locator +=1400
+                    stabiliser += 600; locator += 1400
                 if d == "om1p08_A5em2_alpha0p5":
-                    stabiliser += 70
-                    locator += 230
+                    stabiliser += 70; locator += 230
                 if d == "om1p06_A5em2_alpha0p5":
-                    stabiliser += 60
-                    locator += 200
+                    stabiliser += 60; locator += 200
                 if d == "om1p04_A5em2_alpha0p5":
-                    stabiliser += 200
-                    locator += 1230
-                    upd_stabiliser += 50
-                    upd_locator += 160
+                    stabiliser += 200; locator += 1230
+                    upd_stabiliser += 50; upd_locator += 160
                 if d == "omm1p5_A5em2_alpha0p5":
-                    stabiliser += 50
-                    locator += 200
-                if d =="om1p1_A5em2_alpha0p5":
-                    stabiliser += 100
-                    locator += 600
+                    stabiliser += 50; locator += 200
+                if d == "om1p1_A5em2_alpha0p5":
+                    stabiliser += 100; locator += 600
                 if d == "omm1p62_A5em2_alpha0p5":
-                    stabiliser += 50
-                    locator += 200
+                    stabiliser += 50; locator += 200
                 if d == "omm1p6_A5em2_alpha0p5":
-                    stabiliser += 35
-                    locator += 135
+                    stabiliser += 35; locator += 135
 
                 print(locator, stabiliser)
+
+                # Isolate the linear growth window and remove NaN values before fitting
                 update_time = (t >= stabiliser) & (t <= locator)
                 new_time = t[update_time]
-                print(new_time)
-
                 updated_ydata = time_ydata[update_time]
-                valid_timeydata = ~np.isnan(np.log(updated_ydata))#Creates an array where nan returns false and not nan returns true
+                valid_timeydata = ~np.isnan(np.log(updated_ydata))
                 cleaned_time_ydata = updated_ydata[valid_timeydata]
                 cleaned_time = new_time[valid_timeydata]
 
@@ -380,25 +380,34 @@ for d in final_simulations:
                 cleanest_fixed_time_data = updated_fixed_data[valid_fixed_time_data]
                 mean_timed_fixed_data = np.nanmean(np.log(cleanest_fixed_time_data))
 
+                # Fit a degree-1 polynomial (straight line) to log amplitude vs time
+                # The gradient gives the numerical growth rate
                 line_data = np.polyfit(cleaned_time, np.log(cleaned_time_ydata), 1)
-                output_y = np.polyval(line_data, cleaned_time) #Straight lines are degree 1 polynomials, so we can use polyval to substitute our intercept and gradient to y values of line of best fit
-                plt.plot(cleaned_time, output_y, color='black', linestyle='--', label = f"Gradient: {np.round(line_data[0], 2)}, Analytical Prediction: {np.round((((3*np.sqrt(3))/16)*mean_timed_fixed_data)*np.abs(check_freq), 2)}", zorder = 10)
+                output_y = np.polyval(line_data, cleaned_time)
 
+                # Analytic growth rate prediction: (3*sqrt(3)/16) * mean_amplitude * forcing_frequency
+                # This gives the expected logarithmic growth rate in the linearised case,
+                # against which the numerically fitted gradient is compared
+                plt.plot(cleaned_time, output_y, color='black', linestyle='--',
+                         label=f"Gradient: {np.round(line_data[0], 2)}, Analytical Prediction: {np.round((((3*np.sqrt(3))/16)*mean_timed_fixed_data)*np.abs(check_freq), 2)}",
+                         zorder=10)
+
+                # For om1p04, a second growth phase is identified and fitted separately
                 if d == "om1p04_A5em2_alpha0p5":
                     updated_time = (t >= upd_stabiliser) & (t <= upd_locator)
                     newd_time = t[updated_time]
-                    print(newd_time)
-
                     updated_ydata2 = time_ydata[updated_time]
-                    valid_timeydata2 = ~np.isnan(np.log(updated_ydata2))#Creates an array where nan returns false and not nan returns true
+                    valid_timeydata2 = ~np.isnan(np.log(updated_ydata2))
                     cleaned_time_ydata2 = updated_ydata2[valid_timeydata2]
                     cleaned_time2 = newd_time[valid_timeydata2]
 
                     line_data2 = np.polyfit(cleaned_time2, np.log(cleaned_time_ydata2), 1)
-                    output_y2 = np.polyval(line_data2, cleaned_time2) #Straight lines are degree 1 polynomials, so we can use polyval to substitute our intercept and gradient to y values of line of best fit
-                    plt.plot(cleaned_time2, output_y2, color='red', linestyle='--', label = f"Gradient: {np.round(line_data2[0], 2)}, Analytical Prediction: {np.round((((3*np.sqrt(3))/16)*mean_timed_fixed_data)*np.abs(check_freq), 2)}", zorder = 11)
+                    output_y2 = np.polyval(line_data2, cleaned_time2)
+                    plt.plot(cleaned_time2, output_y2, color='red', linestyle='--',
+                             label=f"Gradient: {np.round(line_data2[0], 2)}, Analytical Prediction: {np.round((((3*np.sqrt(3))/16)*mean_timed_fixed_data)*np.abs(check_freq), 2)}",
+                             zorder=11)
 
-            plt.legend(title = r"$(l,m)$", ncol = 2)
+            plt.legend(title=r"$(l,m)$", ncol=2)
             priority_index -= 1
 
-plt.show() 
+plt.show()
